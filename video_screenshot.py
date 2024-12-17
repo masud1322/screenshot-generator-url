@@ -17,39 +17,35 @@ IMGBB_API_KEY = "b9f27299015facaa09f0393078dc644b"
 
 def upload_to_imgbb(image_path, retry_count=3, delay=2):
     try:
-        with open(image_path, "rb") as file:
-            # Read image file and encode to base64
-            image_data = base64.b64encode(file.read()).decode('utf-8')
-            
-            # Prepare the request
-            url = "https://api.imgbb.com/1/upload"
-            data = {
-                "key": IMGBB_API_KEY,
-                "image": image_data,
-            }
-            
-            # Set proper headers
-            headers = {
-                "Accept": "application/json",
-            }
-            
-            logger.info(f"Uploading {os.path.basename(image_path)} to ImgBB...")
-            response = requests.post(url, data=data, headers=headers)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get("success"):
-                    logger.info(f"Successfully uploaded to ImgBB")
-                    return {
-                        "url": result["data"]["url"],
-                        "direct_url": result["data"]["display_url"],
-                        "delete_url": result["data"]["delete_url"]
-                    }
-                    
-            logger.error(f"ImgBB API error: {response.status_code}")
-            logger.error(f"Response: {response.text}")
-            return None
-            
+        # Prepare the request
+        url = "https://api.imgbb.com/1/upload"
+        
+        # Prepare multipart form data
+        files = {
+            'image': ('image.jpg', open(image_path, 'rb'), 'image/jpeg')
+        }
+        
+        data = {
+            'key': IMGBB_API_KEY
+        }
+        
+        logger.info(f"Uploading {os.path.basename(image_path)} to ImgBB...")
+        response = requests.post(url, files=files, data=data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("success"):
+                logger.info(f"Successfully uploaded to ImgBB")
+                return {
+                    "url": result["data"]["url"],
+                    "direct_url": result["data"]["display_url"],
+                    "delete_url": result["data"]["delete_url"]
+                }
+                
+        logger.error(f"ImgBB API error: {response.status_code}")
+        logger.error(f"Response: {response.text}")
+        return None
+        
     except Exception as e:
         logger.error(f"Failed to upload to ImgBB: {str(e)}")
         return None
