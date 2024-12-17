@@ -5,6 +5,7 @@ from datetime import datetime
 import requests
 import base64
 import time
+import threading
 
 # Set up detailed logging
 logging.basicConfig(
@@ -189,33 +190,19 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
                     filesize = os.path.getsize(filepath)
                     logger.info(f"Screenshot saved: {filepath} ({filesize} bytes)")
                     
-                    # Try ImgBB first
+                    # Try ImgBB upload
                     imgbb_result = upload_to_imgbb(filepath)
-                    
-                    # If ImgBB fails, try freeimage.host
-                    if not imgbb_result:
-                        logger.info("ImgBB upload failed, trying freeimage.host...")
-                        imgbb_result = upload_to_freeimage(filepath)
-                    
-                    # If both fail, try imgbox
-                    if not imgbb_result:
-                        logger.info("Freeimage upload failed, trying imgbox.com...")
-                        imgbb_result = upload_to_imgbox(filepath)
-                    
                     if imgbb_result:
                         imgbb_links.append(imgbb_result)
-                        logger.info(f"Uploaded to image host: {imgbb_result['direct_url']}")
-                        
-                        # Delete local file after successful upload
-                        try:
-                            os.remove(filepath)
-                            logger.info(f"Deleted local file: {filepath}")
-                        except Exception as e:
-                            logger.error(f"Failed to delete local file {filepath}: {str(e)}")
-                    else:
-                        # Keep local file if all uploads failed
-                        screenshots.append(filename)
-                        logger.warning(f"Keeping local file due to failed uploads: {filepath}")
+                        logger.info(f"Uploaded to ImgBB: {imgbb_result['direct_url']}")
+                    
+                    # Always keep local file for display
+                    screenshots.append(filename)
+                    
+                    # Schedule file deletion after 5 minutes
+                    deletion_time = time.time() + 300  # 5 minutes
+                    threading.Timer(300, lambda: delete_file(filepath)).start()
+                    
                 else:
                     logger.error(f"FFmpeg failed for timestamp {time_str}")
                     logger.error(f"Error output: {result.stderr}")
@@ -233,6 +220,14 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
     except Exception as e:
         logger.error(f"Screenshot capture failed: {str(e)}")
         raise
+
+def delete_file(filepath):
+    try:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"Auto-deleted file after 5 minutes: {filepath}")
+    except Exception as e:
+        logger.error(f"Failed to auto-delete file {filepath}: {str(e)}")
 
 # Clean up old screenshots on startup
 def cleanup_screenshots():

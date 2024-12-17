@@ -85,6 +85,7 @@
             gap: 20px;
         }
         .screenshot-container {
+            position: relative;
             background: white;
             padding: 15px;
             border-radius: 8px;
@@ -168,23 +169,24 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            background: none;
+            background: rgba(255,255,255,0.9);
             border: none;
-            padding: 8px;
-            cursor: pointer;
-            width: 40px;
-            height: 40px;
-            color: #6c757d;
-            transition: all 0.3s;
             border-radius: 4px;
+            padding: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
         }
         .copy-btn:hover {
-            color: #3498db;
-            background: rgba(52, 152, 219, 0.1);
+            background: rgba(255,255,255,1);
+            transform: scale(1.1);
         }
-        .copy-btn svg {
+        .copy-icon {
             width: 20px;
             height: 20px;
+            color: #666;
+        }
+        .copy-success {
+            color: #2ecc71;
         }
         .error {
             color: #e74c3c;
@@ -252,6 +254,26 @@
             settings.classList.toggle('show');
         }
 
+        async function copyImageToClipboard(url) {
+            try {
+                // Fetch the image
+                const response = await fetch(url);
+                const blob = await response.blob();
+                
+                // Create a ClipboardItem
+                const data = new ClipboardItem({
+                    'image/png': blob
+                });
+                
+                // Copy to clipboard
+                await navigator.clipboard.write([data]);
+                return true;
+            } catch (err) {
+                console.error('Failed to copy image:', err);
+                return false;
+            }
+        }
+
         function processVideo() {
             const videoUrl = document.getElementById('video_url').value;
             if (!videoUrl) {
@@ -288,29 +310,22 @@
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    // Display screenshots from ImgBB links
-                    screenshotsDiv.innerHTML = data.imgbb
-                        .map((link, index) => `
+                    screenshotsDiv.innerHTML = data.screenshots
+                        .map((url, index) => `
                             <div class="screenshot-container">
-                                <img src="${link.direct_url}" alt="Screenshot ${index + 1}">
+                                <img src="${url}" alt="Screenshot ${index + 1}">
+                                <button class="copy-btn" onclick="handleCopy('${url}', '${data.imgbb[index]?.direct_url || ''}', this)">
+                                    <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                    </svg>
+                                </button>
                                 <div class="timestamp">
                                     Screenshot ${index + 1} - 
                                     ${formatTime(initialDelay + (index * interval))}
                                 </div>
                             </div>
                         `).join('');
-
-                    // Show ImgBB links box
-                    const imgbbDiv = document.getElementById('imgbb_links');
-                    const linksContent = imgbbDiv.querySelector('.links-content');
-                    
-                    if (data.imgbb && data.imgbb.length > 0) {
-                        imgbbDiv.style.display = 'block';
-                        linksContent.innerHTML = data.imgbb
-                            .map(link => `<div>${link.direct_url}</div>`)
-                            .join('');
-                        window.imgbbLinks = data.imgbb.map(link => link.direct_url);
-                    }
                 } else {
                     screenshotsDiv.innerHTML = `<div class="error">Error: ${data.message}</div>`;
                 }
@@ -349,6 +364,33 @@
                         copyBtn.style.color = '#6c757d';
                     }, 2000);
                 });
+        }
+
+        async function handleCopy(localUrl, imgbbUrl, button) {
+            const icon = button.querySelector('.copy-icon');
+            
+            // Try to copy image to clipboard
+            const success = await copyImageToClipboard(localUrl);
+            
+            if (success) {
+                // Show success icon
+                icon.innerHTML = `<polyline points="20 6 9 17 4 12"></polyline>`;
+                icon.classList.add('copy-success');
+                
+                // Reset after 2 seconds
+                setTimeout(() => {
+                    icon.innerHTML = `
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    `;
+                    icon.classList.remove('copy-success');
+                }, 2000);
+            } else {
+                // If image copy fails, try to copy ImgBB URL if available
+                if (imgbbUrl) {
+                    navigator.clipboard.writeText(imgbbUrl);
+                }
+            }
         }
     </script>
 </body>
