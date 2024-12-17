@@ -88,6 +88,64 @@ def upload_to_freeimage(image_path):
         logger.error(f"Failed to upload to freeimage.host: {str(e)}")
         return None
 
+def upload_to_imgbox(image_path):
+    """Upload to imgbox.com as another fallback"""
+    try:
+        url = "https://imgbox.com/upload/process"
+        
+        # Prepare form data
+        files = {
+            'files[]': ('image.jpg', open(image_path, 'rb'), 'image/jpeg')
+        }
+        
+        data = {
+            'gallery_id': '',  # Empty for no gallery
+            'gallery_title': '',
+            'comments_enabled': '0',
+            'adult_content': '0',
+            'thumb_size': '350r'  # Regular thumbnail
+        }
+        
+        # First make an init request
+        init_response = requests.get("https://imgbox.com/upload/init")
+        if init_response.status_code != 200:
+            logger.error("Failed to initialize imgbox upload")
+            return None
+            
+        # Get token from init response
+        try:
+            token = init_response.json().get('token')
+            if not token:
+                logger.error("No token in imgbox init response")
+                return None
+            data['token'] = token
+        except:
+            logger.error("Failed to parse imgbox init response")
+            return None
+            
+        logger.info(f"Uploading {os.path.basename(image_path)} to imgbox.com...")
+        response = requests.post(url, files=files, data=data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                files = result.get('files', [])
+                if files and len(files) > 0:
+                    file_info = files[0]
+                    return {
+                        "url": file_info.get('original_url'),
+                        "direct_url": file_info.get('original_url'),
+                        "delete_url": None  # imgbox doesn't provide delete URL
+                    }
+                    
+        logger.error(f"Imgbox API error: {response.status_code}")
+        logger.error(f"Response: {response.text}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Failed to upload to imgbox: {str(e)}")
+        return None
+
 def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interval=180, filename_prefix="screenshot"):
     try:
         logger.info(f"Starting screenshot capture for video: {video_url}")
@@ -139,6 +197,11 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
                         logger.info("ImgBB upload failed, trying freeimage.host...")
                         imgbb_result = upload_to_freeimage(filepath)
                     
+                    # If both fail, try imgbox
+                    if not imgbb_result:
+                        logger.info("Freeimage upload failed, trying imgbox.com...")
+                        imgbb_result = upload_to_imgbox(filepath)
+                    
                     if imgbb_result:
                         imgbb_links.append(imgbb_result)
                         logger.info(f"Uploaded to image host: {imgbb_result['direct_url']}")
@@ -150,7 +213,7 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
                         except Exception as e:
                             logger.error(f"Failed to delete local file {filepath}: {str(e)}")
                     else:
-                        # Keep local file if both uploads failed
+                        # Keep local file if all uploads failed
                         screenshots.append(filename)
                         logger.warning(f"Keeping local file due to failed uploads: {filepath}")
                 else:
