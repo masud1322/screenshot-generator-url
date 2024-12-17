@@ -14,6 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 IMGBB_API_KEY = os.getenv('IMGBB_API_KEY', 'YOUR_NEW_API_KEY')
+FREEIMAGE_API_KEY = "6d207e02198a847aa98d0a2a901485a5"
 
 def upload_to_imgbb(image_path, retry_count=3, delay=2):
     try:
@@ -48,6 +49,43 @@ def upload_to_imgbb(image_path, retry_count=3, delay=2):
         
     except Exception as e:
         logger.error(f"Failed to upload to ImgBB: {str(e)}")
+        return None
+
+def upload_to_freeimage(image_path):
+    """Upload to freeimage.host as fallback"""
+    try:
+        url = "https://freeimage.host/api/1/upload"
+        
+        # Prepare multipart form data
+        files = {
+            'source': ('image.jpg', open(image_path, 'rb'), 'image/jpeg')
+        }
+        
+        data = {
+            'key': FREEIMAGE_API_KEY,
+            'action': 'upload',
+            'format': 'json'
+        }
+        
+        logger.info(f"Uploading {os.path.basename(image_path)} to freeimage.host...")
+        response = requests.post(url, files=files, data=data)
+        
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("status_code") == 200:
+                logger.info(f"Successfully uploaded to freeimage.host")
+                return {
+                    "url": result["image"]["url"],
+                    "direct_url": result["image"]["display_url"],
+                    "delete_url": None  # freeimage doesn't provide delete URL
+                }
+                
+        logger.error(f"Freeimage API error: {response.status_code}")
+        logger.error(f"Response: {response.text}")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Failed to upload to freeimage.host: {str(e)}")
         return None
 
 def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interval=180, filename_prefix="screenshot"):
@@ -93,11 +131,17 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
                     filesize = os.path.getsize(filepath)
                     logger.info(f"Screenshot saved: {filepath} ({filesize} bytes)")
                     
-                    # Upload to ImgBB
+                    # Try ImgBB first
                     imgbb_result = upload_to_imgbb(filepath)
+                    
+                    # If ImgBB fails, try freeimage.host
+                    if not imgbb_result:
+                        logger.info("ImgBB upload failed, trying freeimage.host...")
+                        imgbb_result = upload_to_freeimage(filepath)
+                    
                     if imgbb_result:
                         imgbb_links.append(imgbb_result)
-                        logger.info(f"Uploaded to ImgBB: {imgbb_result['direct_url']}")
+                        logger.info(f"Uploaded to image host: {imgbb_result['direct_url']}")
                         
                         # Delete local file after successful upload
                         try:
@@ -106,9 +150,9 @@ def capture_screenshots(video_url, num_screenshots=5, initial_delay=300, interva
                         except Exception as e:
                             logger.error(f"Failed to delete local file {filepath}: {str(e)}")
                     else:
-                        # Keep local file if upload failed
+                        # Keep local file if both uploads failed
                         screenshots.append(filename)
-                        logger.warning(f"Keeping local file due to failed upload: {filepath}")
+                        logger.warning(f"Keeping local file due to failed uploads: {filepath}")
                 else:
                     logger.error(f"FFmpeg failed for timestamp {time_str}")
                     logger.error(f"Error output: {result.stderr}")
