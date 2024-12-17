@@ -17,9 +17,8 @@ app = Flask(__name__)
 # Ensure screenshots directory exists
 os.makedirs('static/screenshots', exist_ok=True)
 
-@app.before_first_request
-def before_first_request():
-    cleanup_screenshots()
+# Clean up screenshots at startup
+cleanup_screenshots()
 
 @app.route('/')
 def index():
