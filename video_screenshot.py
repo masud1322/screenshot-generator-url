@@ -13,7 +13,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-IMGBB_API_KEY = "b9f27299015facaa09f0393078dc644b"
+IMGBB_API_KEY = os.getenv('IMGBB_API_KEY', 'YOUR_NEW_API_KEY')
 
 def upload_to_imgbb(image_path, retry_count=3, delay=2):
     try:
